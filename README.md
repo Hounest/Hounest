@@ -1,5 +1,6 @@
 # The summary of my completed and ongoing projects
 My General Skills: Sociological Theory; Stata; SQL; R; Python
+
 (1)(Ongoing)No time to consume? The relationship between people’s time use strategy and their consumption • Master Thesis
    Problem: The relationship between the leisure time of people and the consumption, whether the limitless overwork has no harm to sustainable economic growth and labor efficiency
    Research methods: Linear regression, Time-series analysis, Regression Discontinuity Design
