@@ -9,8 +9,7 @@ My General Skills: Sociological Theory; Stata; SQL; R; Python
    
    Data Source: IMF, OECD Time Use Database, China National Bureau of Statistics and Total Economy Database
 
-
-
+~\\
 (2)The impact of Cross-straits Trade, Traders, and Media on the party identification of Taiwan people • Thesis Paper 
    
    Problem:The relationship among cross-strait trade relations, Taiwan media reports on mainland China, and political opinion in Taiwan
@@ -21,8 +20,7 @@ My General Skills: Sociological Theory; Stata; SQL; R; Python
    
    Data Source: GDELT project, Statistical yearbook of china, Election Study Center National Chengchi University
 
-
-
+~\\
 (3)Intellectual Rent Collection: The “996” Schedule and The Formation of The “overtime consent” Myth of The Programmers • Graduation Dissertation
    
    Problem: the formation of “996” schedule: an exploitation from programmer's labor
