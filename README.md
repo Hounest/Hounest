@@ -1,4 +1,4 @@
-[![Header](https://github.com/Hounest/Hounest/blob/main/IMG_20190519_130112.jpg)]
+![Header](https://github.com/Hounest/Hounest/blob/main/IMG_20190519_130112.jpg)
 # The summary of my completed and ongoing projects
 My General Skills: Sociological Theory; Stata; SQL; R; Python
 
