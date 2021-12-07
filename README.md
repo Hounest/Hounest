@@ -8,7 +8,7 @@ My General Skills: Sociological Theory; Stata; SQL; R; Python
    Research methods: Linear regression, Time-series analysis, Regression Discontinuity Design
    
    Data Source: IMF, OECD Time Use Database, China National Bureau of Statistics and Total Economy Database   
-      
+  <br/>    
 (2)The impact of Cross-straits Trade, Traders, and Media on the party identification of Taiwan people • Thesis Paper 
    
    Problem:The relationship among cross-strait trade relations, Taiwan media reports on mainland China, and political opinion in Taiwan
