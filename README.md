@@ -1,3 +1,4 @@
+[![Header](https://raw.githubusercontent.com/MartinHeinz/<OWNER>/<OWNER>/readme_header.png "Header")](https://some-url.dev/)
 # The summary of my completed and ongoing projects
 My General Skills: Sociological Theory; Stata; SQL; R; Python
 
