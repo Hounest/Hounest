@@ -1,0 +1,172 @@
+---
+title: "Assignment2_zh2448"
+author: "Zhengze Hou"
+date: "3/18/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(ggplot2)
+library(maps)
+library(readr)
+library(tidyverse)
+library(leaflet)
+library(rgdal)
+library(tmap)
+library(ggmap)
+library(sf)
+library(raster)
+library(sp)
+library(RColorBrewer)
+library(dplyr)
+library(htmlwidgets)
+library(widgetframe)
+library(DT)
+```
+
+```{r}
+# Import airbnb
+airbnb <- read_csv("data/airbnb_listings.csv")
+airbnb <- airbnb %>%
+  dplyr::select(id, transit, host_id, neighbourhood_group_cleansed, neighbourhood_cleansed, host_listings_count, latitude, longitude, room_type, accommodates, bathrooms, bedrooms, price, availability_365, number_of_reviews, review_scores_rating)
+
+# Import nyc_boroughs_map
+borough <- readOGR(dsn = "data/nyc_boroughs_map", layer = "nybb")
+
+# Import nyc_neighbourhood map
+neighbourhood <- rgdal::readOGR("data/neighbourhoods.geojson")
+```
+## 1. Overall Location
+## (a) To gain a more detailed perspecitve of NYC Airbnb listings, the information of room_type, accommodates, price, and review_scores_rating is added as popup. The dots are colored based on the review_scores_rating. And I use cluster options to make the map more clear and let people know the distribution of rentals. 
+```{r}
+airbnb$review_scores_rating[is.na(airbnb$review_scores_rating)] <- 0
+pal = colorNumeric("YlGnBu", domain = airbnb$review_scores_rating) # Grab a palette
+color_score = pal(airbnb$review_scores_rating)
+
+content <- paste("Room type:",airbnb$room_type,"<br/>",
+                 "Accomodates:",airbnb$accommodates,"<br/>",
+                 "Price:",airbnb$price,"<br/>",
+                 "review scores:", airbnb$review_scores_rating,"<br/>")
+
+
+location <- leaflet(airbnb) %>%
+      addProviderTiles("Stamen.TonerLite") %>% 
+  setView(-73.9949344, 40.7179112, zoom = 12) %>%
+  addCircleMarkers(lng = ~longitude, lat = ~latitude, 
+                   color = color_score, 
+            radius = ~ifelse(review_scores_rating >= 90, 4, 8),
+             popup = content,
+             clusterOptions = markerClusterOptions()) %>%
+  addLegend(pal = pal, values = ~airbnb$review_scores_rating, title = "Rating score")
+location
+```
+## (b) The map used here is from Google Cloud Platform. And the rather "cold" areas is omitted. There are three obvious hot-spots in Manhattan, I search for the landmarks of these areas and annotate them.
+```{r}
+map_NYC_st <- get_map("New York City", zoom=12, 
+source="stamen", maptype="toner-background")
+nyc <- ggmap(map_NYC_st)
+ggdensity <- nyc  + stat_density2d(data = airbnb, geom = "polygon",
+  aes(x = longitude, y = latitude, fill=..level..,alpha=..level..)) + 
+  scale_fill_gradient(low = "yellow", high = "red")
+ggdensity <- ggdensity + annotate("text",x=-73.987325, y=40.758899, label="Times Square",
+                   color="Green",fontface=2, size=2) +
+    annotate("text",x=-74.0113, y=40.7069, label="New York Stock Exchange",
+             color="Green",fontface=2, size=2) + 
+  annotate("text",x=-73.9874, y=40.7273, label="Ukrainian Village",
+            color="Green",fontface=2, size=2)
+ggdensity
+```
+
+## 2. Renting out your apartment vs. permanent rentals
+## (a) In the map, those neighbourhoods whose rentals are available more than 180 days on average are defined as semi-permanent or permanent rented neighbourhoods. These neighbourhoods are highlighted with names. Since there are so many neighbourhoods' names with tiny size, the map is designed to be able to enlarge. I also develop a datatable to make people more convenient to search the average available days of NYC Airbnb listings in every neighbourhood.
+```{r}
+tmap_options(check.and.fix = TRUE)
+av_365 <- airbnb %>%
+  group_by(neighbourhood_cleansed) %>%
+  summarize(average = mean(availability_365))
+# Merge data of airbnb into neighbourhood@data
+neighbourhood@data <- merge(neighbourhood@data, av_365, by.x = "neighbourhood", by.y = "neighbourhood_cleansed", all.x = TRUE) 
+neighbourhood@data$average[is.na(neighbourhood@data$average)] <- 0
+neighbourhood@data <- neighbourhood@data %>% 
+  mutate(av_permanent = ifelse(average >= 180, as.character(neighbourhood), ""))
+tmap_mode("view")
+nycnbhd <-  tm_shape(neighbourhood) +
+tm_fill("average", breaks = c(0,90 ,180, 365)) + 
+tm_text("av_permanent", size=0.5, col = "black")
+nycnbhd
+
+av_365datatable <- neighbourhood@data[, -4] %>%
+                   arrange(desc(average))
+av_365datatable <- datatable(av_365datatable,
+          caption = "The average available days of NYC Airbnb listings in every neighbourhood",
+          filter = "top") %>%
+      formatStyle('neighbourhood',  color = 'white', 
+                backgroundColor = 'red', fontWeight = 'bold')
+```
+## (b) When calculating the estimated average monthly total income from these listings, the availability is taken into account. I calculate the average available days of the rentals every month(availability_365 / 12), and multiply it with the nightly price(cost) to get the monthly total income of certain rental. The average income is achieved based on the aboved outcome.
+```{r}
+# Modify character type of price into numeric type
+host <- airbnb %>% 
+  mutate(cost = readr::parse_number(price))  
+host$host_id <- as.character(host$host_id)
+host <- mutate(host, monthinc = cost * availability_365 / 12)
+hosttable <- host %>%
+        group_by(host_id) %>%
+        summarize(count = n(), avgcost = round(mean(cost), 2), avgmonthinc = round(mean(monthinc),2)) %>%
+  arrange(desc(count))
+
+hosttable <- hosttable %>%
+    filter(count >= 10)
+hosttable <- datatable(hosttable,
+          caption = "The top hosts of NYC Airbnb listings",
+          filter = "top") %>%
+      formatStyle('host_id',  color = 'white', 
+                backgroundColor = 'red', fontWeight = 'bold')
+hosttable
+```
+## 3. When selecting the Top 100 most expensive and Top 100 best reviewed rentals in NYC, some prerequisites are added.In the top 100 price, the rooms must be available, which means availability_365 >= 1. In the top 100, the selected rooms must be available and be reviewed at least once. Considering the higher ratings reviewed by more people is better. We calculate the aggregated scores of rating, which are review_scores_rating * number_of_reviews, and then select the 100 rentals with highest scores. 
+```{r}
+topprice <- host %>%
+  filter(availability_365 >=1) %>%
+  arrange(desc(cost)) %>% 
+  slice(1:100)
+topreview <- host %>%
+  filter(number_of_reviews >= 1, availability_365 >=1) %>%
+  mutate(reviewsum = review_scores_rating * number_of_reviews) %>%
+  arrange(desc(reviewsum)) %>% 
+  slice(1:100)
+```
+
+```{r}
+# Differentiate the two groups, and show the information of room_type, accommodates, price, and review_scores_rating.
+pal1 = colorNumeric("YlGnBu", domain = topprice$cost)
+color_cost = pal1(topprice$cost)
+pal2 = colorNumeric(c("darkgreen", "yellow", "orangered"), domain = topreview$review_scores_rating) # Grab a palette
+color_review = pal2(topreview$review_scores_rating)
+topcontent <- paste("Room type:",topprice$room_type,"<br/>",
+                 "Accomodates:",topprice$accommodates,"<br/>",
+                 "Price:",topprice$price,"<br/>",
+                 "review scores:",topprice$review_scores_rating,"<br/>")
+topcontent2 <- paste("Room type:",topreview$room_type,"<br/>",
+                 "Accomodates:",topreview$accommodates,"<br/>",
+                 "Price:",topreview$price,"<br/>",
+                 "review scores:",topreview$review_scores_rating,"<br/>")
+topnyc <- leaflet() %>% 
+ setView(lat=40.75, lng=-73.98 , zoom=12) %>%
+addProviderTiles("Stamen.TonerLite") %>%
+  addCircles(data = topprice, lng = ~longitude, lat = ~latitude, 
+                   color = color_cost, 
+            radius = ~ifelse(cost >= 1000, 5, 10),
+             popup = topcontent, group = "Price") %>%
+  addCircles(data = topreview, lng = ~longitude, lat = ~latitude, 
+                   color = color_review, 
+            radius = ~ifelse(reviewsum >= 30000, 5, 10),
+             popup = topcontent2, group = "Review") %>%
+  addLegend(data = topprice, pal = pal1, position = "bottomleft", values = ~topprice$cost, title = "Top prices", group = "Price") %>%
+  addLegend(data = topreview, position = "bottomright", pal = pal2, values = ~topreview$review_scores_rating, title = "Top review ratings", group = "Review") %>%
+    addLayersControl(
+    overlayGroups = c("Price", "Review"),
+    options = layersControlOptions(collapsed = TRUE))
+
+topnyc
+```
