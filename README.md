@@ -30,3 +30,10 @@ My General Skills: Sociological Theory; Stata; SQL; R; Python
    
    Theory Applied: “Manufacturing Consent” of Burawoy; Theory of labor process; New-Taylorism
    
+(4) Recent assignment work
+
+   Assignment 1: analyzing the performance of athletes in Winter Olympic Games 
+   
+   Assignment 2: mapping the distribution, availability, price and review of the Airbnb listing of NYC
+   
+   lab1: A work of social network analysis
