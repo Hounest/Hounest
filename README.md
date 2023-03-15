@@ -2,13 +2,13 @@
 # The summary of my completed and ongoing projects
 My General Skills: Sociological Theory; Stata; SQL; R; Python
 
-(1)(Ongoing)No time to consume? The relationship between people’s time use strategy and their consumption • Master Thesis 
+(1)No time to consume? The relationship between people’s time use strategy and their consumption • Master Thesis 
    
    Problem: The relationship between the leisure time of people and the consumption, whether the limitless overwork has no harm to sustainable economic growth and labor efficiency
    
-   Research methods: Linear regression, Time-series analysis, Regression Discontinuity Design
+   Research methods: Linear regression, Fixed effect regression, Mediation effect test
    
-   Data Source: IMF, OECD Time Use Database, China National Bureau of Statistics and Total Economy Database   
+   Data Source: IMF, World Bank Database, Penn World Table    
   <br/> 
   <br/>
 (2)The impact of Cross-straits Trade, Traders, and Media on the party identification of Taiwan people • Thesis Paper 
@@ -30,10 +30,10 @@ My General Skills: Sociological Theory; Stata; SQL; R; Python
    
    Theory Applied: “Manufacturing Consent” of Burawoy; Theory of labor process; New-Taylorism
    
-(4) Recent assignment work
+(4) Ongoing projects
 
-   Assignment 1: analyzing the performance of athletes in Winter Olympic Games 
+   Project 1: Identify the target emerging enterprises from a given list of enterprises based on their introductions automatically
+   Methods: NLP, Machine learning
+  
    
-   Assignment 2: mapping the distribution, availability, price and review of the Airbnb listing of NYC
-   
-   lab1: A work of social network analysis
+
