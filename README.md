@@ -34,6 +34,9 @@ My General Skills: Sociological Theory; Stata; SQL; R; Python
 
    Project 1: Identify the target emerging enterprises from a given list of enterprises based on their introductions automatically
    Methods: NLP, Machine learning
+   Source file: (1) Scoring.py for the demand of traditional scoring method,which can be potentially used on scoring the availability of reviews or other texts.
+                (2) Machine learning part.py for the demand of automatical identifying the required reviews or other texts. 
+                Tips: A proper training dataset needs to be constructed.
   
    
 
