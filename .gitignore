@@ -4,3 +4,4 @@ data/
 .RData
 *_cache/
 *_files/
+*.patch
