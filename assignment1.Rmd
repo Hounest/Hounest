@@ -1,18 +1,28 @@
 ---
 title: "Assignment1_zh2448"
+author: "Zhengze Hou"
 output: html_document
 ---
 0. Import the data and the packages
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-library(dplyr)
+library(tidyverse)   # dplyr, tidyr, readr, stringr, ggplot2
 library(rvest)
-library(readr)
-library(tidyverse)
-library(ggplot2)
 library(plotly)
-library(stringr)
 library(highcharter)
+library(DT)
+
+## The three source files are too large to track in this repository. Put them
+## under data/ before knitting -- see the "Data" section of README.md.
+data_files <- c("data/athletes_and_events.csv",
+                "data/noc_regions.csv",
+                "data/gdp_pop.csv")
+missing_files <- data_files[!file.exists(data_files)]
+if (length(missing_files) > 0) {
+  stop("Missing input file(s): ", paste(missing_files, collapse = ", "),
+       ". See the 'Data' section of README.md.")
+}
+
 athletes <- read_csv("data/athletes_and_events.csv")
 noc <- read_csv("data/noc_regions.csv")
 gdppop <- read_csv("data/gdp_pop.csv")
@@ -24,16 +34,17 @@ athletes1 <- filter(athletes, Season != "Summer") %>%
   select(NOC, Team, Sex, Year, Sport, Event, Medal) %>%
   distinct()
 
-## Group by countries and calculate medals and games competing in
+## Group by countries and calculate medals and games competing in.
+## Medal is missing for an athlete who competed without placing. Labelling
+## those rows before the pivot gives the participation count a real column
+## name, instead of relying on a positional rename as `spread` did.
 Events <- athletes1 %>%
+  mutate(Medal = replace_na(Medal, "Participate")) %>%
   group_by(NOC, Medal) %>%
-  summarise(total = n())
+  summarise(total = n(), .groups = "drop")
 
-Medal <- spread(
-  Events,
-  key = "Medal",
-  value = "total")
-colnames(Medal)[5] <- "Participate"
+Medal <- Events %>%
+  pivot_wider(names_from = Medal, values_from = total)
 Medal[is.na(Medal)] <- 0
 Medal <- mutate(Medal, Total =  Gold + Silver + Bronze + Participate,
                 TotalMedal = Gold + Silver + Bronze) %>%
@@ -49,14 +60,13 @@ country <- aggregate(cbind(Gold, Silver, Bronze, TotalMedal) ~ region, data = Me
 ```{r}
 ## Over Time table creation, the plot including 10 moat successful countries in Winter Olympics
 Time <- athletes1 %>%
+  mutate(Medal = replace_na(Medal, "Participate")) %>%
   group_by(NOC, Year, Medal) %>%
-  summarise(total = n())
+  summarise(total = n(), .groups = "drop")
 Time <- right_join(noc, Time, by = "NOC")
-Time <- spread(
-  Time,
-  key = "Medal",
-  value = "total")
-Time <- Time[, -3]
+Time <- Time %>%
+  pivot_wider(names_from = Medal, values_from = total) %>%
+  select(-notes)
 Time[is.na(Time)] <- 0
 Time <- mutate(Time,
               Total = Gold + Silver + Bronze) %>%
@@ -64,22 +74,20 @@ Time <- mutate(Time,
 top10 <- country[1:10, ]
 top10overtime <- Time[Time$region %in% top10$region, ]
 ## Picture here with top10 countries 
-library(ggthemes)
 top10hc <- hchart(top10overtime, "scatter", 
        hcaes(x = Year, 
              y = Total, 
              group = region))
 top10hc
 
+## Medal is NA for a non-placing entry, so !is.na() keeps medallists only.
 Sex <- athletes1 %>%
-  filter(Medal != "Na") %>%
+  filter(!is.na(Medal)) %>%
   group_by(NOC, Sex) %>%
-  summarise(total = n())
+  summarise(total = n(), .groups = "drop")
 
-Sex <- spread(
-  Sex,
-  key = "Sex",
-  value = "total")
+Sex <- Sex %>%
+  pivot_wider(names_from = Sex, values_from = total)
 
 Medal <- left_join(Medal, Sex, by = "NOC")
 Medal$F[is.na(Medal$F)] <- 0
@@ -89,17 +97,17 @@ Medal <- aggregate(cbind(Gold, Silver, Bronze, TotalMedal, Participate, Total, F
 Medalsex <- mutate(Medal, genderratio = F/M)
 Medalsex <- Medalsex[1:10, ]
 
-head(Medal, 10) %>% slice
+head(Medal, 10)
 
 topF <- Medal %>%
   select(region, F) %>%
   arrange(desc(F))
-head(topF, 10) %>% slice
+head(topF, 10)
 
 topM <- Medal %>%
   select(region, M) %>%
   arrange(desc(M))
-head(topM, 10) %>% slice
+head(topM, 10)
 ## The aggregated medal rank with a gender ratio perspective.
 ## The ratio closer to 1, the more equal for female and male to gain a medal in this country.
 Medalcount <- ggplot(Medalsex, aes(x = TotalMedal, y = reorder(region, TotalMedal), size = Total)) + 
@@ -110,7 +118,7 @@ Medalcount
 Medalcount2 <- ggplot(Medalsex, 
                      aes(x = "", y = TotalMedal, fill = region)
              ) +
-  geom_bar(stat="identity", width=1, color="white") +
+  geom_col(width=1, color="white") +
   coord_polar("y", start=0) + 
   theme_void()
 Medalcount2
@@ -119,24 +127,26 @@ Medalcount2
 2. GDP 
 ```{r}
 gdp <- right_join(noc, Medal, by = "region")
-gdp <- gdp[-which(gdp$notes =="Hong Kong"), ]
+## Drop the Hong Kong row. Keeping the NA-note rows reproduces what
+## `-which(...)` did, and does not blow up if the note ever disappears.
+gdp <- filter(gdp, is.na(notes) | notes != "Hong Kong")
 gdp <- inner_join(gdp, gdppop, by = c("NOC" = "Code"))
-gdp <- mutate(gdp, medal_gdp = 10^3 * (Gold * 3 + Silver *2 + Bronze) / gdp$'GDP per Capita', 
+gdp <- mutate(gdp, medal_gdp = 10^3 * (Gold * 3 + Silver *2 + Bronze) / `GDP per Capita`, 
               medal_pop = 10^6 * (Gold * 3 + Silver *2 + Bronze) / Population)
 medal_gdp <- select(gdp, region, TotalMedal, medal_gdp) %>%
   arrange(desc(medal_gdp))
-slice(medal_gdp)
+head(medal_gdp, 10)
 
 medal_pop <- select(gdp, region, TotalMedal, medal_pop) %>%
   arrange(desc(medal_pop))
-slice(medal_pop)
+head(medal_pop, 10)
 ## Remove some tiny countries with <= 20 medals
 medal_gdp <- medal_gdp %>%
   filter(TotalMedal > 20)
 medal_pop <- medal_pop %>%
   filter(TotalMedal > 20)
 gdpplot <- ggplot(medal_gdp, aes(x=reorder(region, medal_gdp), y = medal_gdp, fill = region, text = paste("Total:", TotalMedal))) +
-  geom_bar(stat="identity")  + 
+  geom_col()  + 
   coord_flip() + 
   xlab("region") + 
   ggtitle("Great Power Competition",
@@ -144,7 +154,7 @@ gdpplot <- ggplot(medal_gdp, aes(x=reorder(region, medal_gdp), y = medal_gdp, fi
 ggplotly(gdpplot)
 
 popplot <- ggplot(medal_pop, aes(x=reorder(region, medal_pop), y = medal_pop, fill = region, text = paste("Total:", TotalMedal))) +
-  geom_bar(stat="identity")  + 
+  geom_col()  + 
   coord_flip() + 
   xlab("region") + 
   ggtitle("Advantage of King in the North", 
@@ -153,23 +163,30 @@ ggplotly(popplot)
 ```
 3.Host Country Advantage
 ```{r}
+## Needs an internet connection at knit time. html_nodes()/the `fill` argument
+## were superseded in rvest 1.0; html_table() now always fills.
+## Wikipedia reshuffles this page occasionally -- if the columns look wrong,
+## check which element of html_elements("table") holds the host-city list.
 wiki_hosts <- read_html("https://en.wikipedia.org/wiki/List_of_Olympic_Games_host_cities")
-hosts <- html_table(html_nodes(wiki_hosts, "table")[[2]], fill=TRUE)[-1]
+hosts <- html_table(html_elements(wiki_hosts, "table")[[2]])[-1]
 hosts <- hosts %>% filter(Winter != "") %>%
   select(City, Country, Year)
 
 ## Modify over time df to gain meanmedals of every country
-Time <- Time[, -7]
+Time <- Time %>% select(-Participate)
 general <- Time %>% 
   select(region, Gold, Total) %>%
   group_by(region) %>%
   summarize(meanmedal = mean(Total), meangold = mean(Gold)) %>%
   arrange(desc(meanmedal))
-slice(general)
+head(general, 10)
 
 ##Modify host countries official names and append meanmedals
+## Strip Wikipedia footnote markers such as the "[h]" in "Russia[h]" instead of
+## hard-coding one of them, so a renumbered footnote does not break the match.
+hosts <- hosts %>%
+  mutate(Country = str_trim(str_remove_all(Country, "\\[[^]]*\\]")))
 hosts$Country[hosts$Country == "United States"] <- "USA"
-hosts$Country[hosts$Country == "Russia[h]"] <- "Russia"
 hosts$Country[hosts$Country == "Yugoslavia"] <- "Serbia"
 hostmedal <- merge(hosts, Time, by.x = c("Country", "Year"), by.y = c("region", "Year"))
 hostmedal <-  hostmedal %>% 
@@ -177,7 +194,7 @@ hostmedal <-  hostmedal %>%
 hostmedal <- merge(hostmedal, general, by.x = "Country", by.y = "region")
 hostmedal <- mutate(hostmedal, hostadvantage = (Total - meanmedal) * 0.7 + (Gold - meangold) * 0.3) %>%
   arrange(desc(hostadvantage))
-slice(hostmedal)
+head(hostmedal, 10)
 ## Standard of hostadvantage = (Total - meanmedal) * 0.7 + (Gold - meangold) * 0.3
 ## Total = Medals gained during host Olympics this time
 ## Gold = Gold medals gained during host Olympics this time
@@ -196,9 +213,11 @@ hostplot
 4. Most successful athletes
 ```{r}
 athletes2 <- filter(athletes, Season != "Summer") %>%
+              mutate(Medal = replace_na(Medal, "Participate")) %>%
               group_by(Name, Medal) %>%
-              summarise(total = n())
-success <- spread(athletes2, key = "Medal", value = "total") %>%
+              summarise(total = n(), .groups = "drop")
+success <- athletes2 %>%
+             pivot_wider(names_from = Medal, values_from = total) %>%
              arrange(desc(Gold))
 success[is.na(success)] <- 0  
 success <- mutate(success, total = Bronze + Silver + Gold, 
@@ -209,10 +228,10 @@ Body <- filter(athletes, Season != "Summer") %>%
   select(Name, Sex, Height, Weight, Team) %>%
   group_by(Name, Sex, Team) %>%
   summarise(height = mean(Height), 
-            weight = mean(Weight))
+            weight = mean(Weight), .groups = "drop")
 Body <- distinct(Body, Name, .keep_all = TRUE)
 success <- inner_join(success, Body, by = "Name")
-slice(success)
+head(success, 10)
 ## standard of success = Gold * 3 + Silver *2 + Bronze
 bodyplot <- success %>%
   filter(grade >= 10) %>%
@@ -222,7 +241,6 @@ bodyplot
 ```
 6.datatable
 ```{r}
-library(DT)
 ## Medaldatatable has been ranged by Totalmedals while creating
 ## Countries who at least have  one particiption has been calculated
 ## Of course, sports is not just medals, the participation times and medals gained grouped by gender are listed in the datatable.

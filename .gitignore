@@ -1,0 +1,7 @@
+data/
+.Rproj.user/
+.Rhistory
+.RData
+*_cache/
+*_files/
+*.patch
