@@ -6,22 +6,23 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-library(ggplot2)
-library(maps)
-library(readr)
-library(tidyverse)
-library(leaflet)
-library(rgdal)
-library(tmap)
-library(ggmap)
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)   # dplyr, tidyr, readr, ggplot2
 library(sf)
-library(raster)
-library(sp)
-library(RColorBrewer)
-library(dplyr)
-library(htmlwidgets)
-library(widgetframe)
+library(leaflet)
+library(tmap)        # needs tmap >= 4.0 for the tm_scale_* syntax below
 library(DT)
+
+## The inputs are too large to track in this repository. Put them under data/
+## before knitting -- see the "Data" section of README.md.
+data_files <- c("data/airbnb_listings.csv",
+                "data/nyc_boroughs_map/nybb.shp",
+                "data/neighbourhoods.geojson")
+missing_files <- data_files[!file.exists(data_files)]
+if (length(missing_files) > 0) {
+  stop("Missing input file(s): ", paste(missing_files, collapse = ", "),
+       ". See the 'Data' section of README.md.")
+}
 ```
 
 ```{r}
@@ -30,11 +31,19 @@ airbnb <- read_csv("data/airbnb_listings.csv")
 airbnb <- airbnb %>%
   dplyr::select(id, transit, host_id, neighbourhood_group_cleansed, neighbourhood_cleansed, host_listings_count, latitude, longitude, room_type, accommodates, bathrooms, bedrooms, price, availability_365, number_of_reviews, review_scores_rating)
 
-# Import nyc_boroughs_map
-borough <- readOGR(dsn = "data/nyc_boroughs_map", layer = "nybb")
+# rgdal was archived from CRAN in October 2023, so readOGR() is gone. sf reads
+# both a shapefile directory and a GeoJSON, and st_transform() puts them on
+# WGS84 so they line up with the listings' latitude/longitude.
 
-# Import nyc_neighbourhood map
-neighbourhood <- rgdal::readOGR("data/neighbourhoods.geojson")
+# Import nyc_boroughs_map (nybb.shp ships in NY State Plane, EPSG:2263)
+borough <- st_read(dsn = "data/nyc_boroughs_map", layer = "nybb", quiet = TRUE) %>%
+  st_transform(4326)
+
+# Import nyc_neighbourhood map. st_make_valid() repairs the self-intersections
+# that tmap_options(check.and.fix = TRUE) used to paper over.
+neighbourhood <- st_read("data/neighbourhoods.geojson", quiet = TRUE) %>%
+  st_transform(4326) %>%
+  st_make_valid()
 ```
 ## 1. Overall Location
 ## (a) To gain a more detailed perspecitve of NYC Airbnb listings, the information of room_type, accommodates, price, and review_scores_rating is added as popup. The dots are colored based on the review_scores_rating. And I use cluster options to make the map more clear and let people know the distribution of rentals. 
@@ -48,26 +57,33 @@ content <- paste("Room type:",airbnb$room_type,"<br/>",
                  "Price:",airbnb$price,"<br/>",
                  "review scores:", airbnb$review_scores_rating,"<br/>")
 
-
+# Stamen retired its free tile endpoints in October 2023, so the
+# "Stamen.TonerLite" provider no longer resolves. CartoDB Positron is the
+# closest light basemap that still needs no API key.
 location <- leaflet(airbnb) %>%
-      addProviderTiles("Stamen.TonerLite") %>% 
+      addProviderTiles(providers$CartoDB.Positron) %>% 
   setView(-73.9949344, 40.7179112, zoom = 12) %>%
   addCircleMarkers(lng = ~longitude, lat = ~latitude, 
                    color = color_score, 
             radius = ~ifelse(review_scores_rating >= 90, 4, 8),
              popup = content,
              clusterOptions = markerClusterOptions()) %>%
-  addLegend(pal = pal, values = ~airbnb$review_scores_rating, title = "Rating score")
+  addLegend(pal = pal, values = ~review_scores_rating, title = "Rating score")
 location
 ```
-## (b) The map used here is from Google Cloud Platform. And the rather "cold" areas is omitted. There are three obvious hot-spots in Manhattan, I search for the landmarks of these areas and annotate them.
+## (b) The map used here is the official NYC borough outline, drawn with geom_sf. And the rather "cold" areas is omitted. There are three obvious hot-spots in Manhattan, I search for the landmarks of these areas and annotate them.
 ```{r}
-map_NYC_st <- get_map("New York City", zoom=12, 
-source="stamen", maptype="toner-background")
-nyc <- ggmap(map_NYC_st)
+# ggmap's Stamen backend was removed in ggmap 4.0 and its Google backend now
+# needs a billing-enabled API key, so get_map() is replaced by the borough
+# outline loaded above. `..level..` is also retired in favour of after_stat().
+nyc <- ggplot() +
+  geom_sf(data = borough, fill = "grey95", colour = "grey60")
 ggdensity <- nyc  + stat_density2d(data = airbnb, geom = "polygon",
-  aes(x = longitude, y = latitude, fill=..level..,alpha=..level..)) + 
-  scale_fill_gradient(low = "yellow", high = "red")
+  aes(x = longitude, y = latitude, fill = after_stat(level), alpha = after_stat(level))) + 
+  scale_fill_gradient(low = "yellow", high = "red") +
+  coord_sf(xlim = c(-74.05, -73.85), ylim = c(40.65, 40.85), expand = FALSE) +
+  guides(alpha = "none") +
+  theme_void()
 ggdensity <- ggdensity + annotate("text",x=-73.987325, y=40.758899, label="Times Square",
                    color="Green",fontface=2, size=2) +
     annotate("text",x=-74.0113, y=40.7069, label="New York Stock Exchange",
@@ -80,28 +96,33 @@ ggdensity
 ## 2. Renting out your apartment vs. permanent rentals
 ## (a) In the map, those neighbourhoods whose rentals are available more than 180 days on average are defined as semi-permanent or permanent rented neighbourhoods. These neighbourhoods are highlighted with names. Since there are so many neighbourhoods' names with tiny size, the map is designed to be able to enlarge. I also develop a datatable to make people more convenient to search the average available days of NYC Airbnb listings in every neighbourhood.
 ```{r}
-tmap_options(check.and.fix = TRUE)
 av_365 <- airbnb %>%
   group_by(neighbourhood_cleansed) %>%
-  summarize(average = mean(availability_365))
-# Merge data of airbnb into neighbourhood@data
-neighbourhood@data <- merge(neighbourhood@data, av_365, by.x = "neighbourhood", by.y = "neighbourhood_cleansed", all.x = TRUE) 
-neighbourhood@data$average[is.na(neighbourhood@data$average)] <- 0
-neighbourhood@data <- neighbourhood@data %>% 
-  mutate(av_permanent = ifelse(average >= 180, as.character(neighbourhood), ""))
+  summarize(average = mean(availability_365), .groups = "drop")
+# Merge data of airbnb into the neighbourhood layer. An sf object carries its
+# attributes directly, so the old `neighbourhood@data` slot assignment becomes
+# an ordinary left join.
+neighbourhood <- neighbourhood %>%
+  left_join(av_365, by = c("neighbourhood" = "neighbourhood_cleansed")) %>%
+  mutate(average = replace_na(average, 0),
+         av_permanent = ifelse(average >= 180, as.character(neighbourhood), ""))
 tmap_mode("view")
 nycnbhd <-  tm_shape(neighbourhood) +
-tm_fill("average", breaks = c(0,90 ,180, 365)) + 
-tm_text("av_permanent", size=0.5, col = "black")
+tm_fill(fill = "average",
+        fill.scale = tm_scale_intervals(breaks = c(0, 90, 180, 365))) + 
+tm_text(text = "av_permanent", size = 0.5, col = "black")
 nycnbhd
 
-av_365datatable <- neighbourhood@data[, -4] %>%
+av_365datatable <- neighbourhood %>%
+                   st_drop_geometry() %>%
+                   dplyr::select(-av_permanent) %>%
                    arrange(desc(average))
 av_365datatable <- datatable(av_365datatable,
           caption = "The average available days of NYC Airbnb listings in every neighbourhood",
           filter = "top") %>%
       formatStyle('neighbourhood',  color = 'white', 
                 backgroundColor = 'red', fontWeight = 'bold')
+av_365datatable
 ```
 ## (b) When calculating the estimated average monthly total income from these listings, the availability is taken into account. I calculate the average available days of the rentals every month(availability_365 / 12), and multiply it with the nightly price(cost) to get the monthly total income of certain rental. The average income is achieved based on the aboved outcome.
 ```{r}
@@ -112,7 +133,7 @@ host$host_id <- as.character(host$host_id)
 host <- mutate(host, monthinc = cost * availability_365 / 12)
 hosttable <- host %>%
         group_by(host_id) %>%
-        summarize(count = n(), avgcost = round(mean(cost), 2), avgmonthinc = round(mean(monthinc),2)) %>%
+        summarize(count = n(), avgcost = round(mean(cost), 2), avgmonthinc = round(mean(monthinc),2), .groups = "drop") %>%
   arrange(desc(count))
 
 hosttable <- hosttable %>%
@@ -153,7 +174,7 @@ topcontent2 <- paste("Room type:",topreview$room_type,"<br/>",
                  "review scores:",topreview$review_scores_rating,"<br/>")
 topnyc <- leaflet() %>% 
  setView(lat=40.75, lng=-73.98 , zoom=12) %>%
-addProviderTiles("Stamen.TonerLite") %>%
+addProviderTiles(providers$CartoDB.Positron) %>%
   addCircles(data = topprice, lng = ~longitude, lat = ~latitude, 
                    color = color_cost, 
             radius = ~ifelse(cost >= 1000, 5, 10),
@@ -162,8 +183,8 @@ addProviderTiles("Stamen.TonerLite") %>%
                    color = color_review, 
             radius = ~ifelse(reviewsum >= 30000, 5, 10),
              popup = topcontent2, group = "Review") %>%
-  addLegend(data = topprice, pal = pal1, position = "bottomleft", values = ~topprice$cost, title = "Top prices", group = "Price") %>%
-  addLegend(data = topreview, position = "bottomright", pal = pal2, values = ~topreview$review_scores_rating, title = "Top review ratings", group = "Review") %>%
+  addLegend(data = topprice, pal = pal1, position = "bottomleft", values = ~cost, title = "Top prices", group = "Price") %>%
+  addLegend(data = topreview, position = "bottomright", pal = pal2, values = ~review_scores_rating, title = "Top review ratings", group = "Review") %>%
     addLayersControl(
     overlayGroups = c("Price", "Review"),
     options = layersControlOptions(collapsed = TRUE))

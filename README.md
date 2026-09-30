@@ -40,3 +40,38 @@ My General Skills: Sociological Theory; Stata; SQL; R; Python
   
    
 
+## Data
+
+The two R Markdown analyses read from a `data/` directory that is not tracked
+here, because the source files are far larger than is sensible to keep in a
+portfolio repository. Create `data/` next to the `.Rmd` files and add:
+
+`assignment1.Rmd` (Winter Olympics)
+
+| File | Source |
+| --- | --- |
+| `data/athletes_and_events.csv` | Kaggle, *120 years of Olympic history: athletes and results* (`athlete_events.csv`, renamed) |
+| `data/noc_regions.csv` | Kaggle, same dataset |
+| `data/gdp_pop.csv` | World Bank GDP per capita and population, one row per NOC code |
+
+`Assignment2_zh2448.Rmd` (NYC Airbnb)
+
+| File | Source |
+| --- | --- |
+| `data/airbnb_listings.csv` | Inside Airbnb, New York City `listings.csv` |
+| `data/nyc_boroughs_map/` | NYC Department of City Planning Borough Boundaries shapefile (`nybb.shp` plus its sidecar files) |
+| `data/neighbourhoods.geojson` | Inside Airbnb, New York City `neighbourhoods.geojson` |
+
+Each document checks for its inputs in the setup chunk and stops with the list
+of missing paths rather than failing inside `read_csv()`.
+
+Section 3 of `assignment1.Rmd` scrapes Wikipedia, so knitting that document
+needs an internet connection.
+
+### Package notes
+
+Both documents were written in 2022 and have since been updated for current
+CRAN packages. `Assignment2_zh2448.Rmd` now needs **tmap >= 4.0** and reads its
+spatial layers with **sf** rather than the retired `rgdal`. Its basemaps use
+CartoDB Positron and the NYC borough outline, so no map-tile API key is
+required.
